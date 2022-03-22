@@ -1,0 +1,8 @@
+Here are some examples of the use of my qahirah_xcffib
+([GitLab](https://gitlab.com/ldo/qahirah_xcffib),
+[GitHub](https://github.com/ldo/qahirah_xcffib)) Python binding for
+using Cairo graphics together with the [xcffib](https://github.com/tych0/xcffib)
+Python wrapper for libxcb.
+
+Lawrence D'Oliveiro <ldo@geek-central.gen.nz>
+2022 March 22
