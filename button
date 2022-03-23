@@ -1,0 +1,305 @@
+#!/usr/bin/python3
+#+
+# qahirah_xcffib example: clickable buttons.
+#
+# Copyright 2022 by Lawrence D'Oliveiro <ldo@geek-central.gen.nz>. This
+# script is licensed CC0
+# <https://creativecommons.org/publicdomain/zero/1.0/>; do with it
+# what you will.
+#-
+
+import sys
+import random
+import asyncio
+import xcffib
+from xcffib import \
+    xproto
+import qahirah as qah
+from qahirah import \
+    CAIRO, \
+    Vector, \
+    Rect
+import qahirah_xcffib as qah_xcb
+from qahirah_xcffib import \
+    WINATTR, \
+    BUTTON_STATE, \
+    Colour
+
+use_xrender = True
+
+window_background = Colour.grey(0.5)
+
+def choose_colour() :
+    return \
+        Colour.from_hsva((random.random(), 0.25, random.uniform(0.5, 0.75)))
+#end choose_colour
+
+#+
+# Styles of buttons
+#-
+
+class ButtonRender1 :
+
+    def __init__(self, title, colour) :
+        self.title = title
+        self.colour = colour
+        self.colour_adjust_factor = 0.5
+        self.border = 4
+    #end __init__
+
+    def draw(self, ctx, dims, state) :
+        bounds = Rect.from_dimensions(dims)
+        (ctx
+            .set_source_colour(self.colour)
+            .rectangle(bounds)
+            .fill()
+        )
+        inner = bounds.inset(self.border * Vector(1, 1))
+        points = list \
+          (
+            zip
+              (
+                list(p.pt for p in bounds.to_path().segments[0].points),
+                list(p.pt for p in inner.to_path().segments[0].points),
+              )
+          )
+        colours = \
+            [
+                self.colour.replace_hsva
+                  (
+                    v = lambda v : 1 - (self.colour_adjust_factor * (1 - v)),
+                      # lighten
+                    s =
+                        (
+                            lambda s : s,
+                            lambda s : s * 0.5,
+                        )[state == BUTTON_STATE.DISABLED]
+                  ),
+                self.colour.replace_hsva
+                  (
+                    v = lambda v : self.colour_adjust_factor * v,
+                      # darken
+                    s =
+                        (
+                            lambda s : s,
+                            lambda s : s * 0.5,
+                        )[state == BUTTON_STATE.DISABLED]
+                  ),
+            ]
+        text_colour = \
+            (
+                Colour.grey(0),
+                Colour.grey(0.5),
+            )[state == BUTTON_STATE.DISABLED]
+        for i in range(4) :
+            prev = points[i - 1]
+            cur = points[i]
+            (ctx
+                .move_to(prev[1])
+                .line_to(prev[0])
+                .line_to(cur[0])
+                .line_to(cur[1])
+                .close_path()
+                .set_source_colour(colours[int(state == BUTTON_STATE.HIGHLIGHTED) ^ (i // 2)])
+                .fill()
+            )
+        #end for
+        (ctx
+            .select_font_face("Sans Serif", CAIRO.FONT_SLANT_NORMAL, CAIRO.FONT_WEIGHT_NORMAL)
+            .set_font_size(18)
+            .set_source_colour(text_colour)
+            .move_to
+              (
+                        Vector
+                          (
+                            dims.x - ctx.text_extents(self.title).x_advance,
+                            (dims.y + ctx.font_extents.ascent - ctx.font_extents.descent)
+                          )
+                    /
+                        2
+                +
+                    (Vector(0, 0), Vector(2, 2))[state == BUTTON_STATE.HIGHLIGHTED]
+              )
+            .show_text(self.title)
+        )
+    #end draw
+
+#end ButtonRender1
+
+class ButtonRender2 :
+
+    def __init__(self, title, colour) :
+        self.title = title
+        self.colour = colour
+        self.corner_radius = Vector(8, 8)
+        self.border = 4
+    #end __init__
+
+    def draw(self, ctx, dims, state) :
+        bounds = Rect.from_dimensions(dims)
+        button_colour = self.colour
+        text_colour = border_colour = Colour.grey(0)
+        if state == BUTTON_STATE.HIGHLIGHTED :
+            button_colour = button_colour.replace_hsva(h = lambda h : h + 0.5, v = lambda v : 1 - v)
+            text_colour = Colour.grey(1)
+        elif state == BUTTON_STATE.DISABLED :
+            button_colour = button_colour.replace_hsva(s = lambda s : s * 0.5)
+            text_colour = border_colour = Colour.grey(0.5)
+        #end if
+        (ctx
+            .set_source_colour(window_background)
+            .rectangle(bounds)
+            .fill()
+            .set_source_colour(button_colour)
+            .append_path
+              (
+                qah.Path.create_round_rect(bounds, self.corner_radius)
+              )
+            .fill()
+            .set_source_colour(border_colour)
+            .append_path
+              (
+                qah.Path.create_round_rect(bounds.inset(Vector(1, 1) * self.border / 2), self.corner_radius)
+              )
+            .set_line_width(self.border)
+            .stroke()
+        )
+        (ctx
+            .select_font_face("Sans Serif", CAIRO.FONT_SLANT_NORMAL, CAIRO.FONT_WEIGHT_NORMAL)
+            .set_font_size(18)
+            .set_source_colour(text_colour)
+            .move_to
+              (
+                    Vector
+                      (
+                        dims.x - ctx.text_extents(self.title).x_advance,
+                        (dims.y + ctx.font_extents.ascent - ctx.font_extents.descent)
+                      )
+                /
+                    2
+              )
+            .show_text(self.title)
+        )
+    #end draw
+
+#end ButtonRender2
+
+#+
+# Mainline
+#-
+
+loop = qah_xcb.get_event_loop()
+conn = qah_xcb.Connection.open(loop)
+WM_PROTOCOLS = conn.atom_cache.intern_atom(b"WM_PROTOCOLS")
+WM_DELETE_WINDOW = conn.atom_cache.intern_atom(b"WM_DELETE_WINDOW")
+
+window_count = 0
+window_tasks = []
+something_happened = None
+  # a Future for waking up mainline
+
+async def window_task(index) :
+    # creates and manages a new window.
+
+    done = loop.create_future()
+
+    def handle_destroy_notify(window, event) :
+        sys.stderr.write("DestroyNotify for window %#0.8x\n" % window.id)
+        done.set_result(None)
+    #end handle_destroy_notify
+
+    def handle_client_message(window, event) :
+        if event.type == WM_PROTOCOLS :
+            sys.stderr.write(" protocol data = %s\n" % repr(list(event.data.data32)))
+            if event.data.data32[0] == WM_DELETE_WINDOW :
+                sys.stderr.write(" destroy window %d\n" % index)
+                res = window.conn.conn.core.DestroyWindow(window.id)
+                window.conn.conn.flush()
+            #end if
+        #end if
+    #end handle_client_message
+
+#begin window_task
+    window_dims = Vector(400, 200)
+    button_dims = Vector(300, 100)
+    window = await qah_xcb.Window.create_async \
+      (
+        conn = conn,
+        depth = xcffib.XCB_COPY_FROM_PARENT,
+        parent = conn.root_window(conn.conn.pref_screen),
+        bounds = Rect.from_dimensions(window_dims),
+        border_width = 0, # ignored by window managers
+        window_class = xproto.WindowClass.InputOutput,
+        visual = conn.conn.setup.roots[conn.conn.pref_screen].root_visual,
+        set_attrs =
+            (
+                (WINATTR.EVENTMASK, xproto.EventMask.StructureNotify),
+                  # needed to received DestroyNotify events!
+                (WINATTR.BACKPIXEL, window_background.to_pixel()),
+            )
+      )
+    for evt, handle in \
+        (
+            (qah_xcb.X.DestroyNotify, handle_destroy_notify),
+            (qah_xcb.X.ClientMessage, handle_client_message),
+        ) \
+    :
+        window.add_event_filter(handle, selevents = {evt})
+    #end for
+    button_render = \
+        random.choice([ButtonRender1, ButtonRender2]) \
+          (
+            title = random.choice(["What Harm Could There Be", "In Pressing A Little Button?"]),
+            colour = choose_colour()
+          )
+    enabled = True # button in first window is never disabled
+    if index > 1 :
+        enabled = random.choice([False, True])
+    #end if
+    button = qah_xcb.ButtonHandler \
+      (
+        parent = window,
+        bounds = round(Rect.from_dimensions(button_dims) + (window_dims - button_dims) / 2),
+        gravity = xproto.Gravity.Center,
+        handle_draw = button_render.draw,
+        handle_draw_args = (),
+        handle_click = create_window,
+        handle_click_args = (),
+        enabled = enabled,
+        use_xrender = use_xrender
+      )
+    window.set_name("Window %d" % index)
+    await window.set_protocols_async(["WM_DELETE_WINDOW"])
+    window.set_mapped(True)
+    await done
+    if not something_happened.done() :
+        # notify mainline
+        something_happened.set_result(None)
+    #end if
+#end window_task
+
+def create_window() :
+    global window_count
+    window_count += 1
+    window_tasks.append(loop.create_task(window_task(window_count)))
+    if not something_happened.done() :
+        # notify mainline
+        something_happened.set_result(None)
+    #end if
+#end create_window
+
+async def mainline() :
+    global something_happened
+    something_happened = loop.create_future()
+    create_window() # start things off with first window
+    while True :
+        await something_happened
+        window_tasks[:] = list(t for t in window_tasks if not t.done())
+        if len(window_tasks) == 0 :
+            break
+        something_happened = loop.create_future()
+          # replace used one with a new one
+    #end while
+#end mainline
+
+loop.run_until_complete(mainline())
