@@ -30,7 +30,6 @@ conn = qah_xcb.Connection.open(loop)
 
 async def mainline() :
 
-    window_dims = Vector(500, 200)
     done = loop.create_future()
 
     def handle_configure_notify(this_window, evt) :
@@ -75,6 +74,7 @@ async def mainline() :
     #end handle_conn_error
 
 #begin mainline
+    window_dims = Vector(500, 200)
     window = qah_xcb.Window.create \
       (
         conn = conn,
