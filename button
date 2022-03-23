@@ -159,7 +159,11 @@ class ButtonRender2 :
             .set_source_colour(border_colour)
             .append_path
               (
-                qah.Path.create_round_rect(bounds.inset(Vector(1, 1) * self.border / 2), self.corner_radius)
+                qah.Path.create_round_rect
+                  (
+                    bounds.inset(Vector(1, 1) * self.border * 0.25),
+                    self.corner_radius
+                  )
               )
             .set_line_width(self.border)
             .stroke()
