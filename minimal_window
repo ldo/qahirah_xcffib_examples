@@ -83,7 +83,7 @@ async def mainline() :
         bounds = Rect.from_dimensions(window_dims) + Vector(200, 200),
         border_width = 0,
         window_class = xproto.WindowClass.InputOutput,
-        visual = conn.conn.setup.roots[0].root_visual,
+        visual = conn.conn.setup.roots[conn.conn.pref_screen].root_visual,
         set_attrs =
             (
                 (WINATTR.EVENTMASK,
@@ -93,7 +93,7 @@ async def mainline() :
                 ),
             )
       )
-    surface = window.create_surface(0, window_dims, use_xrender)
+    surface = window.create_surface(conn.conn.pref_screen, window_dims, use_xrender)
     ctx = qah.Context.create(surface)
     window.user_data["surface"] = surface
     window.user_data["surface_dims"] = window_dims
