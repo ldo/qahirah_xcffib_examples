@@ -39,6 +39,7 @@ def choose_colour() :
 #-
 
 class ButtonRender1 :
+    "a bevelled-style button that looks like it moves when pressed."
 
     def __init__(self, title, colour) :
         self.title = title
@@ -127,6 +128,7 @@ class ButtonRender1 :
 #end ButtonRender1
 
 class ButtonRender2 :
+    "a rounded-corner button that does a simple inverse highlight when pressed."
 
     def __init__(self, title, colour) :
         self.title = title
