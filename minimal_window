@@ -42,7 +42,6 @@ async def mainline() :
     def handle_expose(window, evt) :
         # actually draw the window contents
         ctx = window.user_data["ctx"]
-        pix = window.user_data["surface"]
         dimensions = window.user_data["surface_dims"]
         (ctx
             .set_source
@@ -61,7 +60,7 @@ async def mainline() :
               )
             .paint()
         )
-        pix.flush()
+        window.user_data["surface"].flush()
     #end handle_expose
 
     def handle_conn_error(window, evt) :
