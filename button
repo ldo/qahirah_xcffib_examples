@@ -210,6 +210,13 @@ async def window_task(index) :
     done = loop.create_future()
 
     def handle_destroy_notify(window, event) :
+        # Why bother to deal with DestroyNotify messages? There’s not
+        # much point in this simple example, but in a more realistic
+        # app you might have other ways of closing a window than via
+        # window-manager-provided functionality, such as a “Close
+        # Window” item in one of your menus. The DestroyNotify handler
+        # provides a centralized place for dealing with all the ways
+        # of closing a window.
         sys.stderr.write("DestroyNotify for window %#0.8x\n" % window.id)
         done.set_result(None)
     #end handle_destroy_notify
@@ -221,6 +228,8 @@ async def window_task(index) :
                 sys.stderr.write(" destroy window %d\n" % index)
                 res = window.conn.conn.core.DestroyWindow(window.id)
                 window.conn.conn.flush()
+                # and wait for the DestroyNotify message before actually
+                # ending the task.
             #end if
         #end if
     #end handle_client_message
@@ -276,6 +285,9 @@ async def window_task(index) :
       )
     window.set_name("Window %d" % index)
     await window.set_protocols_async(["WM_DELETE_WINDOW"])
+      # This is how you get to manage closing your own windows,
+      # rather than having the window manager do it for you
+      # and closing your X server connection.
     window.set_mapped(True)
     await done
     if not something_happened.done() :
