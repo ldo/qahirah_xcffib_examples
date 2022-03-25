@@ -28,6 +28,11 @@ from qahirah_xcffib import \
 use_xrender = True
 
 window_background = Colour.grey(0.5)
+button_text_font = \
+    (qah.Context.create_for_dummy()
+        .select_font_face("Sans Serif", CAIRO.FONT_SLANT_NORMAL, CAIRO.FONT_WEIGHT_NORMAL)
+        .set_font_size(18)
+    ).scaled_font
 
 def choose_colour() :
     return \
@@ -106,8 +111,7 @@ class ButtonRender1 :
             )
         #end for
         (ctx
-            .select_font_face("Sans Serif", CAIRO.FONT_SLANT_NORMAL, CAIRO.FONT_WEIGHT_NORMAL)
-            .set_font_size(18)
+            .set_scaled_font(button_text_font)
             .set_source_colour(text_colour)
             .move_to
               (
@@ -171,8 +175,7 @@ class ButtonRender2 :
             .stroke()
         )
         (ctx
-            .select_font_face("Sans Serif", CAIRO.FONT_SLANT_NORMAL, CAIRO.FONT_WEIGHT_NORMAL)
-            .set_font_size(18)
+            .set_scaled_font(button_text_font)
             .set_source_colour(text_colour)
             .move_to
               (
