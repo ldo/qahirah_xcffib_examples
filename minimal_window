@@ -65,7 +65,7 @@ async def mainline() :
 
     def handle_conn_error(window, evt) :
         # terminate mainline when connection goes down (e.g. window is closed)
-        if isinstance(evt, Exception) :
+        if isinstance(evt, xcffib.ConnectionException) :
             #sys.stderr.write("conn error %s" % repr(evt))
             done.set_result(None)
         #end if
