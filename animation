@@ -1,0 +1,150 @@
+#!/usr/bin/python3
+#+
+# qahirah_xcffib example: simple animation.
+#
+# Copyright 2022 by Lawrence D'Oliveiro <ldo@geek-central.gen.nz>. This
+# script is licensed CC0
+# <https://creativecommons.org/publicdomain/zero/1.0/>; do with it
+# what you will.
+#-
+
+import sys
+import time
+import asyncio
+import xcffib
+from xcffib import \
+    xproto
+import qahirah as qah
+from qahirah import \
+    CAIRO, \
+    Vector, \
+    Rect
+import qahirah_xcffib as qah_xcb
+from qahirah_xcffib import \
+    WINATTR, \
+    Colour
+
+use_xrender = True
+
+anim_period = 2 # seconds
+anim_fps = 25
+
+#+
+# Mainline
+#-
+
+loop = qah_xcb.get_event_loop()
+conn = qah_xcb.Connection.open(loop)
+
+async def mainline() :
+
+    anim_start = time.monotonic()
+
+    done = loop.create_future()
+
+    def handle_configure(window, evt) :
+        # synchronize dimensions of drawing surface with those of window
+        nonlocal window_dims
+        window_dims = Vector(evt.width, evt.height)
+        window.user_data["pix"].set_size(window_dims)
+        window.user_data["pix_dims"] = window_dims
+    #end handle_configure
+
+    def handle_expose(window, evt) :
+        draw_anim(window.user_data["pix"], window.user_data["pix_dims"])
+    #end handle_expose
+
+    def handle_conn_error(window, evt) :
+        # terminate mainline when connection goes down (e.g. window is closed)
+        if isinstance(evt, xcffib.ConnectionException) :
+            #sys.stderr.write("conn error %s" % repr(evt))
+            done.set_result(None)
+        #end if
+    #end handle_conn_error
+
+    def draw_anim(ctx, dims) :
+        anim_now = time.monotonic()
+        angle = (anim_now - anim_start) / anim_period * qah.circle
+        figure_size = min(dims)
+        shape = \
+            qah.Path.create_circle((0, 0), figure_size / 2) \
+            .transform(qah.Matrix.scale((0.5, 1)))
+        (ctx
+            .set_source_colour(Colour.grey(0.75))
+            .paint()
+            .save()
+            .translate(Vector(0.5, 0.5) * figure_size)
+            .rotate(angle)
+            .set_source
+              (
+                qah.Pattern.create_radial
+                  (
+                    c0 = (0, 0),
+                    r0 = 0,
+                    c1 = (0, 0),
+                    r1 = figure_size / 2,
+                    colour_stops =
+                        (
+                            (0, Colour.from_hsva((0.5, 0.5, 0.5))),
+                            (1, Colour.from_hsva((0.1, 1, 1))),
+                        )
+                  )
+              )
+            .new_path()
+            .append_path(shape)
+            .fill()
+            .restore()
+        )
+        ctx.target.flush()
+    #end draw_anim
+
+#begin mainline
+    window_dims = Vector(400, 400)
+    window = await qah_xcb.Window.create_async \
+      (
+        conn = conn,
+        depth = xcffib.XCB_COPY_FROM_PARENT,
+        parent = conn.root_window(conn.conn.pref_screen),
+        bounds = Rect.from_dimensions(window_dims),
+        border_width = 0, # ignored by window managers
+        window_class = xproto.WindowClass.InputOutput,
+        visual = conn.conn.setup.roots[conn.conn.pref_screen].root_visual,
+        set_attrs =
+            (
+                (WINATTR.EVENTMASK, xproto.EventMask.StructureNotify),
+                (WINATTR.BACKPIXEL, Colour.grey(1).to_pixel()),
+            )
+      )
+    for evt, handle in \
+        (
+            (qah_xcb.X.ConfigureNotify, handle_configure),
+            (qah_xcb.X.Expose, handle_expose),
+        ) \
+    :
+        window.add_event_filter(handle, selevents = {evt})
+    #end for
+    window.add_event_filter(handle_conn_error)
+    window.user_data["pix_dims"] = window_dims
+    window.user_data["pix"] = window.create_surface \
+      (
+        screenindex = conn.conn.pref_screen,
+        dimensions = window_dims,
+        use_xrender = use_xrender
+      )
+    ctx = qah.Context.create(window.user_data["pix"])
+    window.user_data["ctx"] = ctx
+    window.set_name("Animation")
+    window.set_mapped(True)
+    while True :
+        await asyncio.wait \
+          (
+            [asyncio.create_task(asyncio.sleep(1 / anim_fps)), done],
+            return_when = asyncio.FIRST_COMPLETED
+          )
+        if done.done() :
+            break
+        draw_anim(ctx, window_dims)
+    #end while
+#end mainline
+
+loop.run_until_complete(mainline())
