@@ -22,8 +22,6 @@ import qahirah_xcffib as qah_xcb
 from qahirah_xcffib import \
     WINATTR
 
-use_xrender = True
-
 loop = qah_xcb.get_event_loop()
 conn = qah_xcb.Connection.open(loop)
 
@@ -91,7 +89,7 @@ async def mainline() :
                 ),
             )
       )
-    surface = window.create_surface(conn.conn.pref_screen, window_dims, use_xrender)
+    surface = window.create_surface(conn.conn.pref_screen, window_dims)
     ctx = qah.Context.create(surface)
     window.user_data["surface"] = surface
     window.user_data["surface_dims"] = window_dims

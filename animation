@@ -24,8 +24,6 @@ from qahirah_xcffib import \
     WINATTR, \
     Colour
 
-use_xrender = True
-
 anim_period = 2 # seconds
 anim_fps = 25
 
@@ -128,8 +126,7 @@ async def mainline() :
     window.user_data["pix"] = window.create_surface \
       (
         screenindex = conn.conn.pref_screen,
-        dimensions = window_dims,
-        use_xrender = use_xrender
+        dimensions = window_dims
       )
     ctx = qah.Context.create(window.user_data["pix"])
     window.user_data["ctx"] = ctx

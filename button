@@ -25,8 +25,6 @@ from qahirah_xcffib import \
     BUTTON_STATE, \
     Colour
 
-use_xrender = True
-
 window_background = Colour.grey(0.5)
 button_text_font = \
     (qah.Context.create_for_dummy()
@@ -283,8 +281,7 @@ async def window_task(index) :
         handle_draw_args = (),
         handle_click = create_window,
         handle_click_args = (),
-        enabled = enabled,
-        use_xrender = use_xrender
+        enabled = enabled
       )
     window.set_name("Window %d" % index)
     await window.set_protocols_async(["WM_DELETE_WINDOW"])
