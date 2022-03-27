@@ -107,8 +107,10 @@ async def mainline() :
 
     def handle_keypress(window, evt) :
         keymap = window.user_data["keymap"]
-        if any(evt.detail in m for m in keymap.mod_sets) :
-            pass # ignore modifier press
+        modsym = keymap.mod_map.get(evt.detail)
+        if modsym != None :
+            # ignore modifier press
+            sys.stderr.write("modifier %s\n" % repr(modsym))
         else :
             key = keymap.map_simple(evt)
             sys.stderr.write("code %d => key %d\n" % (evt.detail, key)) # debug
