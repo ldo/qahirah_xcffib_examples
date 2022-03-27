@@ -166,7 +166,10 @@ async def mainline() :
         border_width = 0,
         window_class = xproto.WindowClass.InputOutput,
         visual = conn.conn.setup.roots[conn.conn.pref_screen].root_visual,
-        set_attrs = ()
+        set_attrs =
+            (
+                (WINATTR.BACKPIXEL, Colour.grey(0).to_pixel()),
+            )
       )
     surface = window.create_surface(conn.conn.pref_screen, window_dims)
     ctx = qah.Context.create(surface)
