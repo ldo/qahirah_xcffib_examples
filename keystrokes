@@ -1,0 +1,182 @@
+#!/usr/bin/python3
+#+
+# qahirah_xcffib example: basic handling of keypress events.
+# Needs the Symbola font installed for proper display of
+# control characters.
+#
+# Copyright 2022 by Lawrence D'Oliveiro <ldo@geek-central.gen.nz>. This
+# script is licensed CC0
+# <https://creativecommons.org/publicdomain/zero/1.0/>; do with it
+# what you will.
+#-
+
+import sys
+import asyncio
+import xcffib
+from xcffib import \
+    xproto
+import qahirah as qah
+from qahirah import \
+    Colour, \
+    Vector, \
+    Rect
+import qahirah_xcffib as qah_xcb
+from qahirah_xcffib import \
+    XK, \
+    WINATTR
+
+loop = qah_xcb.get_event_loop()
+conn = qah_xcb.Connection.open(loop)
+
+use_font = \
+    (qah.Context.create_for_dummy()
+        .set_font_face
+          (
+            #qah.FontFace.create_for_pattern("Noto Sans Symbols2")
+              # has control pictures, but no regular printable characters
+            qah.FontFace.create_for_pattern("Symbola")
+          )
+        .set_font_size(36)
+    ).scaled_font
+
+key_chart = \
+    { # visible representations of selected nonprinting characters
+        XK.VoidSymbol : chr(0x25a1), # WHITE SQUARE (for anything undefined)
+        XK.BackSpace : chr(0x2408), # SYMBOL FOR BACKSPACE
+        XK.Tab : chr(0x2409), # SYMBOL FOR HORIZONTAL TABULATION
+        XK.Return : chr(0x240d), # SYMBOL FOR CARRIAGE_RETURN
+        XK.Escape : chr(0x241b), # SYMBOL FOR ESCAPE
+        XK.Delete : chr(0x2421), # SYMBOL FOR DELETE
+        ord(" ") : chr(0x2423), # OPEN BOX
+    }
+
+async def mainline() :
+
+    done = loop.create_future()
+
+    char_lifetime = 5
+
+    def handle_configure_notify(this_window, evt) :
+        # synchronize dimensions of drawing surface with those of window
+        window_dims = Vector(evt.width, evt.height)
+        #sys.stderr.write("ConfigureNotify, evt = %d, new window size = %s\n" % (evt.response_type, window_dims))
+        window.user_data["surface"].set_size(window_dims)
+        window.user_data["surface_dims"] = window_dims
+    #end handle_configure_notify
+
+    def handle_expose(window, evt) :
+        # actually draw the window contents
+        ctx = window.user_data["ctx"]
+        dimensions = window.user_data["surface_dims"]
+        text = "".join(t["char"] for t in window.user_data["text"])
+        (ctx
+            .set_source_colour(Colour.grey(0.8))
+            .paint()
+            .set_source_colour(Colour.grey(0))
+            .set_scaled_font(use_font)
+            .move_to
+              (
+                Vector
+                  (
+                    (dimensions.x - use_font.text_extents(text).x_advance) / 2,
+                    (dimensions.y + use_font.font_extents.descent - use_font.font_extents.ascent) / 2
+                  )
+              )
+            .show_text(text)
+        )
+        window.user_data["surface"].flush()
+    #end handle_expose
+
+    def remove_old_chars(window) :
+        # remove characters typed longer ago than char_lifetime seconds.
+        text = window.user_data["text"]
+        now = loop.time()
+        popped = False
+        while len(text) != 0 and text[0]["expire"] <= now :
+            text.pop(0)
+            popped = True
+        #end while
+        if popped :
+            window.invalidate()
+        #end if
+        if len(text) != 0 :
+            # more to do, later
+            loop.call_at(text[0]["expire"], remove_old_chars, window)
+        #end if
+    #end remove_old_chars
+
+    def handle_keypress(window, evt) :
+        # FIXME: also gets called for modifier-only key presses; should
+        # ignore these for text entry.
+        key = window.user_data["keymap"].map_simple(evt)
+        sys.stderr.write("code %d => key %d\n" % (evt.detail, key)) # debug
+        if key in range(33, 127) :
+            key = chr(key)
+        elif key in key_chart :
+            key = key_chart[key]
+        else :
+            key = key_chart[XK.VoidSymbol]
+        #end if
+        expire = loop.time() + char_lifetime
+        text = window.user_data["text"]
+        if len(text) == 0 :
+            # start expiry task
+            loop.call_at(expire, remove_old_chars, window)
+        #end if
+        text.append({"char" : key, "expire" : expire})
+        window.invalidate()
+    #end handle_keypress
+
+    def handle_conn_error(window, evt) :
+        # terminate mainline when connection goes down (e.g. window is closed)
+        if isinstance(evt, xcffib.ConnectionException) :
+            #sys.stderr.write("conn error %s" % repr(evt))
+            done.set_result(None)
+        #end if
+    #end handle_conn_error
+
+#begin mainline
+    window_dims = Vector(500, 200)
+    window = qah_xcb.Window.create \
+      (
+        conn = conn,
+        depth = xcffib.XCB_COPY_FROM_PARENT,
+        parent = conn.root_window(0),
+        bounds = Rect.from_dimensions(window_dims) + Vector(200, 200),
+        border_width = 0,
+        window_class = xproto.WindowClass.InputOutput,
+        visual = conn.conn.setup.roots[conn.conn.pref_screen].root_visual,
+        set_attrs =
+            (
+                (WINATTR.EVENTMASK,
+                        xproto.EventMask.Exposure
+                    |
+                        xproto.EventMask.StructureNotify
+                    |
+                        xproto.EventMask.KeyPress
+                ),
+            )
+      )
+    surface = window.create_surface(conn.conn.pref_screen, window_dims)
+    ctx = qah.Context.create(surface)
+    window.user_data["surface"] = surface
+    window.user_data["surface_dims"] = window_dims
+    window.user_data["ctx"] = ctx
+    window.user_data["keymap"] = qah_xcb.KeyMapping.obtain_from(conn)
+    window.user_data["text"] = []
+    window.set_name("Type Something")
+    for evt, handler in \
+        (
+            (qah_xcb.X.ConfigureNotify, handle_configure_notify),
+            (qah_xcb.X.Expose, handle_expose),
+            (qah_xcb.X.KeyPress, handle_keypress),
+        ) \
+    :
+        window.add_event_filter(handler, selevents = {evt})
+    #end for
+    window.add_event_filter(handle_conn_error)
+    window.set_mapped(True)
+    await done
+#end mainline
+
+loop.run_until_complete(mainline())
