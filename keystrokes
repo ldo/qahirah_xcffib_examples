@@ -106,25 +106,28 @@ async def mainline() :
     #end remove_old_chars
 
     def handle_keypress(window, evt) :
-        # FIXME: also gets called for modifier-only key presses; should
-        # ignore these for text entry.
-        key = window.user_data["keymap"].map_simple(evt)
-        sys.stderr.write("code %d => key %d\n" % (evt.detail, key)) # debug
-        if key in range(33, 127) :
-            key = chr(key)
-        elif key in key_chart :
-            key = key_chart[key]
+        keymap = window.user_data["keymap"]
+        if any(evt.detail in m for m in keymap.mod_sets) :
+            pass # ignore modifier press
         else :
-            key = key_chart[XK.VoidSymbol]
+            key = keymap.map_simple(evt)
+            sys.stderr.write("code %d => key %d\n" % (evt.detail, key)) # debug
+            if key in range(33, 127) :
+                key = chr(key)
+            elif key in key_chart :
+                key = key_chart[key]
+            else :
+                key = key_chart[XK.VoidSymbol]
+            #end if
+            expire = loop.time() + char_lifetime
+            text = window.user_data["text"]
+            if len(text) == 0 :
+                # start expiry task
+                loop.call_at(expire, remove_old_chars, window)
+            #end if
+            text.append({"char" : key, "expire" : expire})
+            window.invalidate()
         #end if
-        expire = loop.time() + char_lifetime
-        text = window.user_data["text"]
-        if len(text) == 0 :
-            # start expiry task
-            loop.call_at(expire, remove_old_chars, window)
-        #end if
-        text.append({"char" : key, "expire" : expire})
-        window.invalidate()
     #end handle_keypress
 
     def handle_conn_error(window, evt) :
