@@ -1,0 +1,238 @@
+#!/usr/bin/python3
+#+
+# qahirah_xcffib example: custom cursors.
+#
+# Copyright 2022 by Lawrence D'Oliveiro <ldo@geek-central.gen.nz>. This
+# script is licensed CC0
+# <https://creativecommons.org/publicdomain/zero/1.0/>; do with it
+# what you will.
+#-
+
+import sys
+import asyncio
+import xcffib
+from xcffib import \
+    xproto
+import qahirah as qah
+from qahirah import \
+    Vector, \
+    Rect
+import qahirah_xcffib as qah_xcb
+from qahirah_xcffib import \
+    WINATTR, \
+    Colour
+
+#+
+# Cursor rendering
+#
+# Each function takes three arguments, being the dimensions of the
+# cursor, and two drawing contexts, one for rendering the cursor
+# image (black for foreground, white for background), the other
+# for rendering the mask (black for opaque, white for transparent).
+#
+# Remember that X11 only allows one bit per pixel for the cursor
+# colour, and one bit for the mask. Cairo cannot seem to draw
+# directly into such one-bit-per-pixel pixmaps, so I allocate
+# full RGB pixmaps for drawing, then render them down to define
+# the actual Cursor.
+#-
+
+def draw_cursor_1(dims : Vector, img_ctx : qah.Context, mask_ctx : qah.Context) :
+    # a two-colour chevron.
+    width = 0.4
+    # draw the same shapes twice, once for the image and once for the mask
+    for ctx, colours in \
+        (
+            (img_ctx, [Colour.grey(0), Colour.grey(1)]),
+            (mask_ctx, 2 * [Colour.grey(0)]),
+        ) \
+    :
+        (ctx
+            .set_source_colour(Colour.grey(1))
+            .paint()
+            .set_line_width(min(dims) / 7)
+        )
+        for pos, colour in zip((Vector(0.5, 0.45), Vector(0.5, 0.9)), colours) :
+            (ctx
+                .set_source_colour(colour)
+                .new_path()
+                .save()
+                .scale(dims)
+                .move_to(pos + Vector(- 1, - 1) * width)
+                .line_to(pos)
+                .line_to(pos + Vector(1, -1) * width)
+                .restore()
+                .stroke()
+            )
+        #end for
+    #end for
+#end draw_cursor_1
+
+def draw_cursor_2(dims : Vector, img_ctx : qah.Context, mask_ctx : qah.Context) :
+    # a circle with enclosed inclined crosshairs.
+    line_width = min(dims) / 7
+    for ctx in (img_ctx, mask_ctx) :
+        (ctx
+            .transform(qah.Matrix.rotate(30 * qah.deg, dims / 2))
+            .set_source_colour(Colour.grey(1))
+            .paint()
+            .set_source_colour(Colour.grey(0))
+            .set_line_width(line_width)
+            .save()
+            .new_path()
+            .circle(dims / 2, min(dims) / 2 - 0.5 * line_width)
+            .scale(dims)
+            .move_to((0.5, 0))
+            .line_to((0.5, 1))
+            .move_to((0, 0.5))
+            .line_to((1, 0.5))
+            .restore()
+            .stroke()
+        )
+    #end for
+#end draw_cursor_2
+
+def draw_cursor_3(dims : Vector, img_ctx : qah.Context, mask_ctx : qah.Context) :
+    # two concentric circles.
+    line_width = min(dims) / 8
+    for ctx in (img_ctx, mask_ctx) :
+        (ctx
+            .set_source_colour(Colour.grey(1))
+            .paint()
+            .set_source_colour(Colour.grey(0))
+            .set_line_width(line_width)
+            .new_path()
+            .circle(dims / 2, min(dims) / 2 - 0.5 * line_width)
+            .circle(dims / 2, min(dims) / 4 - 0.5 * line_width)
+            .stroke()
+        )
+    #end for
+#end draw_cursor_3
+
+def draw_cursor_4(dims : Vector, img_ctx : qah.Context, mask_ctx : qah.Context) :
+    # a diagonal crosshair with a solid centre circle.
+    for ctx, colours in \
+        (
+            (img_ctx, [Colour.grey(0), Colour.grey(1)]),
+            (mask_ctx, 2 * [Colour.grey(0)]),
+        ) \
+    :
+        (ctx
+            .set_source_colour(Colour.grey(1))
+            .paint()
+            .set_source_colour(colours[1])
+            .circle(dims / 2, min(dims) / 3)
+            .fill()
+            .set_source_colour(colours[0])
+            .set_line_width(min(dims) / 8)
+            .new_path()
+            .move_to((0, 0))
+            .line_to(dims)
+            .move_to((0, dims.y))
+            .line_to((dims.x, 0))
+            .stroke()
+        )
+    #end for
+#end draw_cursor_4
+
+#+
+# Mainline
+#-
+
+loop = qah_xcb.get_event_loop()
+conn = qah_xcb.Connection.open(loop)
+
+async def mainline() :
+
+    done = loop.create_future()
+
+    def handle_conn_error(window, evt) :
+        # terminate mainline when connection goes down (e.g. window is closed)
+        if isinstance(evt, xcffib.ConnectionException) :
+            #sys.stderr.write("conn error %s" % repr(evt))
+            done.set_result(None)
+        #end if
+    #end handle_conn_error
+
+#begin mainline
+    window_dims = Vector(500, 500)
+    cursor_dims = Vector(32, 32)
+    window = qah_xcb.Window.create \
+      (
+        conn = conn,
+        depth = xcffib.XCB_COPY_FROM_PARENT,
+        parent = conn.root_window(0),
+        bounds = Rect.from_dimensions(window_dims) + Vector(200, 200),
+        border_width = 0,
+        window_class = xproto.WindowClass.InputOutput,
+        visual = conn.conn.setup.roots[conn.conn.pref_screen].root_visual,
+        set_attrs = ()
+      )
+    surface = window.create_surface(conn.conn.pref_screen, window_dims)
+    ctx = qah.Context.create(surface)
+    window.user_data["surface"] = surface
+    window.user_data["surface_dims"] = window_dims
+    window.user_data["ctx"] = ctx
+    window.set_name("Custom Cursors")
+    subdivide = Vector(2, 2)
+    pixmaps = []
+    cursors = []
+      # keep object references around, just to be safe
+    for cell, draw_cursor, bg in \
+        (
+            (Vector(0, 0), draw_cursor_1, Colour.grey(0.9)),
+            (Vector(0, 1), draw_cursor_2, Colour.grey(0.8)),
+            (Vector(1, 0), draw_cursor_3, Colour.grey(0.7)),
+            (Vector(1, 1), draw_cursor_4, Colour.grey(0.6)),
+        ) \
+    :
+        # partition the window into subwindows with distinctive
+        # backgrounds, each with its own cursor
+        curspix = window.create_pixmap(conn.conn.pref_screen, 24, cursor_dims)
+        cursmask = window.create_pixmap(conn.conn.pref_screen, 24, cursor_dims)
+        draw_cursor \
+          (
+            dims = cursor_dims,
+            img_ctx = qah.Context.create(curspix.surface),
+            mask_ctx = qah.Context.create(cursmask.surface)
+          )
+        cursor = qah_xcb.Cursor.create_from_rgb \
+          (
+            conn = conn,
+            source = curspix,
+            mask = cursmask,
+            dimensions = cursor_dims,
+            forecolour = Colour.from_hsva((0.5, 0.5, 0.5)),
+            backcolour = Colour.from_hsva((0.7, 0.5, 0.9)),
+            hotspot = round(cursor_dims / 2)
+          )
+        pixmaps.extend([curspix, cursmask])
+        cursors.append(cursor)
+        subwindow = qah_xcb.Window.create \
+          (
+            conn = conn,
+            depth = xcffib.XCB_COPY_FROM_PARENT,
+            parent = window,
+            bounds = round
+              (
+                    (Rect.from_dimensions(Vector(1, 1) / subdivide) + cell / subdivide)
+                *
+                    window_dims
+              ),
+            border_width = 0,
+            window_class = xproto.WindowClass.InputOutput,
+            visual = xcffib.XCB_COPY_FROM_PARENT,
+            set_attrs =
+                (
+                    (WINATTR.BACKPIXEL, bg.to_pixel()),
+                    (WINATTR.CURSOR, cursor.id),
+                )
+          )
+        subwindow.set_mapped(True)
+    #end for
+    window.add_event_filter(handle_conn_error)
+    window.set_mapped(True)
+    await done
+#end mainline
+
+loop.run_until_complete(mainline())
