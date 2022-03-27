@@ -94,6 +94,8 @@ class ButtonRender1 :
             (
                 Colour.grey(0),
                 Colour.grey(0.5),
+                  # might not look good against all possible backgrounds.
+                  # C’est la vie.
             )[state == BUTTON_STATE.DISABLED]
         for i in range(4) :
             prev = points[i - 1]
