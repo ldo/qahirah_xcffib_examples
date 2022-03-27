@@ -193,6 +193,142 @@ class ButtonRender2 :
 
 #end ButtonRender2
 
+class ButtonRender3 :
+    "a bevelled-style button, similar to ButtonRender1 but with" \
+    " rounded-looking bevels."
+
+    def __init__(self, title, colour) :
+        self.title = title
+        self.colour = colour
+        self.colour_adjust_factor = 0.5
+        self.border = 4
+    #end __init__
+
+    def draw(self, ctx, dims, state) :
+        bounds = Rect.from_dimensions(dims)
+        (ctx
+            .set_source_colour(self.colour)
+            .rectangle(bounds)
+            .fill()
+        )
+        inner = bounds.inset(self.border * Vector(1, 1))
+        points = list \
+          (
+            zip
+              (
+                list(p.pt for p in bounds.to_path().segments[0].points),
+                list(p.pt for p in inner.to_path().segments[0].points),
+              )
+          )
+        colours = \
+            [
+                self.colour.replace_hsva
+                  (
+                    v = lambda v : 1 - (self.colour_adjust_factor * (1 - v)),
+                      # lighten
+                    s =
+                        (
+                            lambda s : s,
+                            lambda s : s * 0.5,
+                        )[state == BUTTON_STATE.DISABLED]
+                  ),
+                self.colour.replace_hsva
+                  (
+                    v = lambda v : self.colour_adjust_factor * v,
+                      # darken
+                    s =
+                        (
+                            lambda s : s,
+                            lambda s : s * 0.5,
+                        )[state == BUTTON_STATE.DISABLED]
+                  ),
+            ]
+        gradients = \
+            [
+                qah.Pattern.create_linear # left edge
+                  (
+                    p0 = (0, 0),
+                    p1 = (self.border, 0),
+                    colour_stops =
+                        (
+                            (0, colours[int(state == BUTTON_STATE.HIGHLIGHTED)]),
+                            (1, self.colour),
+                        )
+                  ),
+                qah.Pattern.create_linear # top edge
+                  (
+                    p0 = (0, 0),
+                    p1 = (0, self.border),
+                    colour_stops =
+                        (
+                            (0, colours[int(state == BUTTON_STATE.HIGHLIGHTED)]),
+                            (1, self.colour),
+                        )
+                  ),
+                qah.Pattern.create_linear # right edge
+                  (
+                    p0 = (bounds.right - self.border, 0),
+                    p1 = (bounds.right, 0),
+                    colour_stops =
+                        (
+                            (0, self.colour),
+                            (1, colours[int(state != BUTTON_STATE.HIGHLIGHTED)]),
+                        )
+                  ),
+                qah.Pattern.create_linear # bottom edge
+                  (
+                    p0 = (0, bounds.bottom - self.border),
+                    p1 = (0, bounds.bottom),
+                    colour_stops =
+                        (
+                            (0, self.colour),
+                            (1, colours[int(state != BUTTON_STATE.HIGHLIGHTED)]),
+                        )
+                  ),
+            ]
+        text_colour = \
+            (
+                Colour.grey(0),
+                Colour.grey(0.5),
+                  # might not look good against all possible backgrounds.
+                  # C’est la vie.
+            )[state == BUTTON_STATE.DISABLED]
+        for i in range(4) :
+            prev = points[i - 1]
+            cur = points[i]
+            (ctx
+                .move_to(prev[1])
+                .line_to(prev[0])
+                .line_to(cur[0])
+                .line_to(cur[1])
+                .close_path()
+                .set_source(gradients[i])
+                .fill()
+            )
+        #end for
+        (ctx
+            .set_scaled_font(button_text_font)
+            .set_source_colour(text_colour)
+            .move_to
+              (
+                        Vector
+                          (
+                            dims.x - ctx.text_extents(self.title).x_advance,
+                            (dims.y + ctx.font_extents.ascent - ctx.font_extents.descent)
+                          )
+                    /
+                        2
+                +
+                    (Vector(0, 0), Vector(2, 2))[state == BUTTON_STATE.HIGHLIGHTED]
+              )
+            .show_text(self.title)
+        )
+    #end draw
+
+#end ButtonRender3
+
+button_styles = [ButtonRender1, ButtonRender2, ButtonRender3]
+
 #+
 # Mainline
 #-
@@ -265,7 +401,7 @@ async def window_task(index) :
         window.add_event_filter(handle, selevents = {evt})
     #end for
     button_render = \
-        random.choice([ButtonRender1, ButtonRender2]) \
+        random.choice(button_styles) \
           (
             title = random.choice(["What Harm Could There Be", "In Pressing A Little Button?"]),
             colour = choose_colour()
