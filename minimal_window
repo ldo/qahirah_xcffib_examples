@@ -22,12 +22,11 @@ import qahirah_xcffib as qah_xcb
 from qahirah_xcffib import \
     WINATTR
 
-loop = qah_xcb.get_event_loop()
-conn = qah_xcb.Connection.open(loop)
+conn = qah_xcb.Connection.open()
 
 async def mainline() :
 
-    done = loop.create_future()
+    done = conn.loop.create_future()
 
     def handle_configure_notify(this_window, evt) :
         # synchronize dimensions of drawing surface with those of window
@@ -108,4 +107,4 @@ async def mainline() :
     await done
 #end mainline
 
-loop.run_until_complete(mainline())
+conn.loop.run_until_complete(mainline())
