@@ -9,7 +9,6 @@
 #-
 
 import sys
-import asyncio
 import xcffib
 from xcffib import \
     xproto
