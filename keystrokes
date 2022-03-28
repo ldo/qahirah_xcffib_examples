@@ -48,6 +48,9 @@ key_chart = \
         XK.Escape : chr(0x241b), # SYMBOL FOR ESCAPE
         XK.Delete : chr(0x2421), # SYMBOL FOR DELETE
         ord(" ") : chr(0x2423), # OPEN BOX
+      # selected control characters:
+        7 : chr(0x237e), # BELL SYMBOL
+        10 : chr(0x240a), # SYMBOL FOR LINE FEED
     }
 
 async def mainline() :
@@ -116,6 +119,18 @@ async def mainline() :
             sys.stderr.write("code %d => key %d\n" % (evt.detail, key)) # debug
             if key in range(33, 127) :
                 key = chr(key)
+                if evt.state & qah_xcb.STATE.CTRL.mask != 0 :
+                    if ord(key) in range(ord("a"), ord("z") + 1) :
+                        key = ord(key) - ord("a") + 1
+                        if key in key_chart :
+                            key = key_chart[key]
+                        else :
+                            key = key_chart[XK.VoidSymbol]
+                        #end if
+                    else :
+                        key = key_chart[XK.VoidSymbol]
+                    #end if
+                #end if
             elif key in key_chart :
                 key = key_chart[key]
             else :
