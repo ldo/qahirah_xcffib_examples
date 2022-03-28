@@ -9,7 +9,6 @@
 #-
 
 import sys
-import asyncio
 import xcffib
 from xcffib import \
     xproto
@@ -139,12 +138,11 @@ def draw_cursor_4(dims : Vector, img_ctx : qah.Context, mask_ctx : qah.Context) 
 # Mainline
 #-
 
-loop = qah_xcb.get_event_loop()
-conn = qah_xcb.Connection.open(loop)
+conn = qah_xcb.Connection.open()
 
 async def mainline() :
 
-    done = loop.create_future()
+    done = conn.loop.create_future()
 
     def handle_conn_error(window, evt) :
         # terminate mainline when connection goes down (e.g. window is closed)
@@ -238,4 +236,4 @@ async def mainline() :
     await done
 #end mainline
 
-loop.run_until_complete(mainline())
+conn.loop.run_until_complete(mainline())
