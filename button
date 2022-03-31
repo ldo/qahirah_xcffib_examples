@@ -314,7 +314,7 @@ class ButtonRender3 :
                         Vector
                           (
                             dims.x - ctx.text_extents(self.title).x_advance,
-                            (dims.y + ctx.font_extents.ascent - ctx.font_extents.descent)
+                            dims.y + ctx.font_extents.ascent - ctx.font_extents.descent
                           )
                     /
                         2
