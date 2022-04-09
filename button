@@ -24,6 +24,7 @@ from qahirah_xcffib import \
     WINATTR, \
     BUTTON_STATE, \
     Colour
+import qah_useful
 
 window_background = Colour.grey(0.5)
 button_text_font = \
@@ -52,44 +53,22 @@ class ButtonRender1 :
     #end __init__
 
     def draw(self, ctx, dims, state) :
-        bounds = Rect.from_dimensions(dims)
-        (ctx
-            .set_source_colour(self.colour)
-            .rectangle(bounds)
-            .fill()
-        )
-        inner = bounds.inset(self.border * Vector(1, 1))
-        points = list \
+        qah_useful.flat_bevel \
           (
-            zip
+            ctx,
+            bounds = Rect.from_dimensions(dims),
+            base_colour = self.colour.replace_hsva
               (
-                list(p.pt for p in bounds.to_path().segments[0].points),
-                list(p.pt for p in inner.to_path().segments[0].points),
-              )
+                s =
+                    (
+                        lambda s : s,
+                        lambda s : s * 0.5,
+                    )[state == BUTTON_STATE.DISABLED]
+              ),
+            border = self.border,
+            invert = state == BUTTON_STATE.HIGHLIGHTED,
+            colour_adjust_factor = self.colour_adjust_factor
           )
-        colours = \
-            [
-                self.colour.replace_hsva
-                  (
-                    v = lambda v : 1 - (self.colour_adjust_factor * (1 - v)),
-                      # lighten
-                    s =
-                        (
-                            lambda s : s,
-                            lambda s : s * 0.5,
-                        )[state == BUTTON_STATE.DISABLED]
-                  ),
-                self.colour.replace_hsva
-                  (
-                    v = lambda v : self.colour_adjust_factor * v,
-                      # darken
-                    s =
-                        (
-                            lambda s : s,
-                            lambda s : s * 0.5,
-                        )[state == BUTTON_STATE.DISABLED]
-                  ),
-            ]
         text_colour = \
             (
                 Colour.grey(0),
@@ -97,19 +76,6 @@ class ButtonRender1 :
                   # might not look good against all possible backgrounds.
                   # C’est la vie.
             )[state == BUTTON_STATE.DISABLED]
-        for i in range(4) :
-            prev = points[i - 1]
-            cur = points[i]
-            (ctx
-                .move_to(prev[1])
-                .line_to(prev[0])
-                .line_to(cur[0])
-                .line_to(cur[1])
-                .close_path()
-                .set_source_colour(colours[int(state == BUTTON_STATE.HIGHLIGHTED) ^ (i // 2)])
-                .fill()
-            )
-        #end for
         (ctx
             .set_scaled_font(button_text_font)
             .set_source_colour(text_colour)
@@ -205,87 +171,22 @@ class ButtonRender3 :
     #end __init__
 
     def draw(self, ctx, dims, state) :
-        bounds = Rect.from_dimensions(dims)
-        (ctx
-            .set_source_colour(self.colour)
-            .rectangle(bounds)
-            .fill()
-        )
-        inner = bounds.inset(self.border * Vector(1, 1))
-        points = list \
+        qah_useful.round_bevel \
           (
-            zip
+            ctx,
+            bounds = Rect.from_dimensions(dims),
+            base_colour = self.colour.replace_hsva
               (
-                list(p.pt for p in bounds.to_path().segments[0].points),
-                list(p.pt for p in inner.to_path().segments[0].points),
-              )
+                s =
+                    (
+                        lambda s : s,
+                        lambda s : s * 0.5,
+                    )[state == BUTTON_STATE.DISABLED]
+              ),
+            border = self.border,
+            invert = state == BUTTON_STATE.HIGHLIGHTED,
+            colour_adjust_factor = self.colour_adjust_factor
           )
-        colours = \
-            [
-                self.colour.replace_hsva
-                  (
-                    v = lambda v : 1 - (self.colour_adjust_factor * (1 - v)),
-                      # lighten
-                    s =
-                        (
-                            lambda s : s,
-                            lambda s : s * 0.5,
-                        )[state == BUTTON_STATE.DISABLED]
-                  ),
-                self.colour.replace_hsva
-                  (
-                    v = lambda v : self.colour_adjust_factor * v,
-                      # darken
-                    s =
-                        (
-                            lambda s : s,
-                            lambda s : s * 0.5,
-                        )[state == BUTTON_STATE.DISABLED]
-                  ),
-            ]
-        gradients = \
-            [
-                qah.Pattern.create_linear # left edge
-                  (
-                    p0 = (0, 0),
-                    p1 = (self.border, 0),
-                    colour_stops =
-                        (
-                            (0, colours[int(state == BUTTON_STATE.HIGHLIGHTED)]),
-                            (1, self.colour),
-                        )
-                  ),
-                qah.Pattern.create_linear # top edge
-                  (
-                    p0 = (0, 0),
-                    p1 = (0, self.border),
-                    colour_stops =
-                        (
-                            (0, colours[int(state == BUTTON_STATE.HIGHLIGHTED)]),
-                            (1, self.colour),
-                        )
-                  ),
-                qah.Pattern.create_linear # right edge
-                  (
-                    p0 = (bounds.right - self.border, 0),
-                    p1 = (bounds.right, 0),
-                    colour_stops =
-                        (
-                            (0, self.colour),
-                            (1, colours[int(state != BUTTON_STATE.HIGHLIGHTED)]),
-                        )
-                  ),
-                qah.Pattern.create_linear # bottom edge
-                  (
-                    p0 = (0, bounds.bottom - self.border),
-                    p1 = (0, bounds.bottom),
-                    colour_stops =
-                        (
-                            (0, self.colour),
-                            (1, colours[int(state != BUTTON_STATE.HIGHLIGHTED)]),
-                        )
-                  ),
-            ]
         text_colour = \
             (
                 Colour.grey(0),
@@ -293,19 +194,6 @@ class ButtonRender3 :
                   # might not look good against all possible backgrounds.
                   # C’est la vie.
             )[state == BUTTON_STATE.DISABLED]
-        for i in range(4) :
-            prev = points[i - 1]
-            cur = points[i]
-            (ctx
-                .move_to(prev[1])
-                .line_to(prev[0])
-                .line_to(cur[0])
-                .line_to(cur[1])
-                .close_path()
-                .set_source(gradients[i])
-                .fill()
-            )
-        #end for
         (ctx
             .set_scaled_font(button_text_font)
             .set_source_colour(text_colour)
